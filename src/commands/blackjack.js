@@ -14,12 +14,12 @@ module.exports = {
                 const game = {
                     textChannel: message.channel,
                     dealerHand:[],
-                    players:[],
+                    players: new Map(),
                     count: 0,
                     end: false,
-                    reacted: 0
+                    reacted: []
                 }
-                game.players.push(new Player(message.author.id));
+                game.players.set(message.author.id,new Player(message.author.id));
                 gameList.set(message.guild.id,game);
                 deal(game,Discord,message);
                 
@@ -56,33 +56,38 @@ async function displayPlayerHand(player,Discord,message){
 
             {name:'Cards:',value: `${text}`}
 
-        ).setDescription(`${player.id}`)
+        ).setDescription(`<@${player.id}>`)
     message.channel.send(playerShow);
 }
 
 const deal = async (game, Discord,message) =>{
     if(game.end === true){
         console.log("Game ended");
+        gameList.delete(message.guild.id);
         return;
     }
-    game.reacted = 0;
+    game.reacted = [];
     if(game.count === 0){
         
         let dealerHiddenCard = new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),true);
         let dealerCard = new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),false);
         game.dealerHand.push(dealerCard);
         game.dealerHand.push(dealerHiddenCard);
-        for(const p of game.players){
+        for(let [k,v] of game.players){
+            console.log(k)
             for(let i = 0; i < 2; i++){
                 let playerCard = new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),false);
-                p.addCard(playerCard);
+                v.addCard(playerCard);
             }
         }
         
     }else{
         game.dealerHand[1].isFaceDown = false;
     }
-    displayPlayerHand(game.players[0],Discord,message);
+    for(let [k,v] of game.players){
+        displayPlayerHand(v,Discord,message);
+    }
+    
             const dealerShow = new Discord.MessageEmbed()
             .setTitle("Dealer Hand").addFields(
                 
@@ -117,9 +122,9 @@ const deal = async (game, Discord,message) =>{
 
                 collector.on('collect',(reaction,user) =>{
                     let currPlayer;
-                    for(let p of game.players){
-                        if(p.id === user.id){
-                            currPlayer = p;
+                    for(let [k,v] of game.players){
+                        if(v.id === user.id){
+                            currPlayer = v;
                         }
                     }
 
@@ -127,26 +132,33 @@ const deal = async (game, Discord,message) =>{
                         case '🇭':
                             console.log("Hit");
                             currPlayer.hand.push(new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),false));
-                            
+                            game.reacted.push(currPlayer.id);
                             break;
                         case '🇸':
                             console.log("Stand");
-                            game.reacted++;
+                            game.reacted.push(currPlayer.id);
                             break;
                         case '❌':
                             console.log("Leave");
-                            
+                            game.players.delete(currPlayer.id);
+                            game.reacted.push(currPlayer.id);
+                            if(game.players.size === 0){
+                                game.end = true;
+                            }
                             break;
                     }
-                    if(game.reacted === game.players.length){
+                    console.log(game.reacted.length);
+                    console.log(game.players.size);
+                    if(game.reacted.length >= game.players.size){
                         collector.stop();
                     }
                 })
 
                 collector.on('end',async (user) =>{
-                    if(game.count !== 0){
-                        await deal(game, Discord,message);
-                    }
+                    
+                    await deal(game, Discord,message);
+                    
+                    //console.log("Timeout")
                 })
                 
                 game.count++
