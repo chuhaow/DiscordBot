@@ -83,6 +83,31 @@ const deal = async (game, Discord,message) =>{
         
     }else{
         game.dealerHand[1].isFaceDown = false;
+        for(let [k,v] of game.players){
+            let sum = sumHand(v.hand);
+            let dealerSum = sumHand(game.dealerHand);
+            console.log("Sum:"+sum);
+            console.log("Dealer:"+dealerSum);
+            console.log("Stand:"+game.players.get(k).isStand);
+            if(sum > 21){
+                v.hasLost = true
+                game.players.delete(k)
+                console.log("Player Bust");
+            }else if( sum === 21){
+                v.hasWon = true;
+                game.players.delete(k)
+                console.log("Player Blackjack");
+            }else if(sum < 21 && v.isStand && sum < dealerSum){
+                v.hasWon = true;
+                game.players.delete(k)
+                console.log("Player less than dealer")
+            }else if(sum < 21 && v.isStand && sum > dealerSum){
+                v.hasLost = true;
+                game.players.delete(k)
+                console.log("Player Win")
+
+            }
+        }
     }
     for(let [k,v] of game.players){
         displayPlayerHand(v,Discord,message);
@@ -118,15 +143,12 @@ const deal = async (game, Discord,message) =>{
                     return result;
                 }
                 
+                
                 const collector = embedMessage.createReactionCollector(filter,{ time: 15000 });
 
                 collector.on('collect',(reaction,user) =>{
-                    let currPlayer;
-                    for(let [k,v] of game.players){
-                        if(v.id === user.id){
-                            currPlayer = v;
-                        }
-                    }
+                    let currPlayer = game.players.get(user.id);
+                    
 
                     switch(reaction.emoji.name){
                         case '🇭':
@@ -136,7 +158,10 @@ const deal = async (game, Discord,message) =>{
                             break;
                         case '🇸':
                             console.log("Stand");
+                            currPlayer.isStand = true;
+                            console.log(currPlayer.isStand);
                             game.reacted.push(currPlayer.id);
+                            console.log("Player:"+currPlayer.id);
                             break;
                         case '❌':
                             console.log("Leave");
@@ -183,10 +208,23 @@ const deal = async (game, Discord,message) =>{
     
 }
 
-const sumHand= async (hand)=>{
+async function displayWinner(player,Discord,message){
+    const playerShow = new Discord.MessageEmbed()
+        .setTitle(`Winner`).
+        setDescription(`<@${player.id}>`)
+    message.channel.send(playerShow);
+}
+
+const sumHand = (hand)=>{
     let sum = 0;
+ 
     for(let i = 0; i < hand.length;i++){
-        sum += hand[i].value()+1;
+        if(hand[i].value+1 > 10){
+            sum+= 10;
+        }else{
+            sum += hand[i].value+1;
+        }
+        
     }
     return sum
 }
@@ -194,6 +232,9 @@ const sumHand= async (hand)=>{
 class Player{
     #id;
     #hand = [];
+    #hasLost = false;
+    #hasWon = false;
+    #isStand = false;
     constructor(id){
         this.#id = id;
     }
@@ -204,6 +245,22 @@ class Player{
 
     get id(){
         return this.#id;
+    }
+
+    get isStand(){
+        return this.#isStand;
+    }
+
+    set isStand(stand){
+        this.#isStand = stand;
+    }
+
+    set hasWon(won){
+        this.#hasWon = won;
+    }
+
+    set hasLost(lost){
+        this.#hasLost = lost;
     }
 
     printHand(){
