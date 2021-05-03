@@ -17,7 +17,8 @@ module.exports = {
                     players: new Map(),
                     count: 0,
                     end: false,
-                    reacted: []
+                    reacted: [],
+                    notReacted: []
                 }
                 game.players.set(message.author.id,new Player(message.author.id));
                 gameList.set(message.guild.id,game);
@@ -49,6 +50,16 @@ module.exports = {
     
 }
 
+function printDealerHand(dealerHand){
+    let result = "";
+    
+    for(let i = 0; i <dealerHand.length;i++){
+        result  += dealerHand[i].print() + "\n"
+    }   
+    
+    return result;
+}
+
 async function displayPlayerHand(player,Discord,message){
     let text  = player.printHand();
     const playerShow = new Discord.MessageEmbed()
@@ -61,12 +72,19 @@ async function displayPlayerHand(player,Discord,message){
 }
 
 const deal = async (game, Discord,message) =>{
-    if(game.end === true){
+    
+    game.reacted = [];
+    game.notReacted = [];
+    for(let [k,v] of game.players){
+        if(!v.isStand){
+            game.notReacted.push(k);
+        }
+    }
+    if(game.notReacted.length === 0){
         console.log("Game ended");
         gameList.delete(message.guild.id);
-        return;
+        return endGame(game,Discord,message);
     }
-    game.reacted = [];
     if(game.count === 0){
         
         let dealerHiddenCard = new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),true);
@@ -83,41 +101,24 @@ const deal = async (game, Discord,message) =>{
         
     }else{
         game.dealerHand[1].isFaceDown = false;
-        for(let [k,v] of game.players){
-            let sum = sumHand(v.hand);
-            let dealerSum = sumHand(game.dealerHand);
-            console.log("Sum:"+sum);
-            console.log("Dealer:"+dealerSum);
-            console.log("Stand:"+game.players.get(k).isStand);
-            if(sum > 21){
-                v.hasLost = true
-                game.players.delete(k)
-                console.log("Player Bust");
-            }else if( sum === 21){
-                v.hasWon = true;
-                game.players.delete(k)
-                console.log("Player Blackjack");
-            }else if(sum < 21 && v.isStand && sum < dealerSum){
-                v.hasWon = true;
-                game.players.delete(k)
-                console.log("Player less than dealer")
-            }else if(sum < 21 && v.isStand && sum > dealerSum){
-                v.hasLost = true;
-                game.players.delete(k)
-                console.log("Player Win")
-
-            }
+        let dealerSum = sumHand(game.dealerHand);
+        while(dealerSum < 17){ //Dealer Hits
+            let dealerCard = new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),false);
+            game.dealerHand.push(dealerCard);
+            dealerSum += dealerCard.value+1;
         }
+        dealerSum = sumHand(game.dealerHand);
+
+        
     }
     for(let [k,v] of game.players){
         displayPlayerHand(v,Discord,message);
     }
-    
+            let dealerDisplay = printDealerHand(game.dealerHand);
             const dealerShow = new Discord.MessageEmbed()
             .setTitle("Dealer Hand").addFields(
                 
-                {name:'Cards:',value: `${game.dealerHand[0].print()} \n
-                ${game.dealerHand[1].print()}`}
+                {name:'Cards:',value: `${dealerDisplay}`}
                 
             )
             
@@ -130,14 +131,14 @@ const deal = async (game, Discord,message) =>{
                     if(!['🇭','🇸','❌'].includes(reaction.emoji.name)){
                         result = false;
                     }
-                    console.log(result);
-                    for(let i = 0; i < game.players.length;i++){
-                        if(game.players[i].id !== player.id){
+                    //console.log(result);
+                    for(let i = 0; i < game.notReacted.length;i++){
+                        if(game.notReacted[i] !== player.id){
                             result = false;
                             
                         }
-                        console.log(game.players[i].id);
-                            console.log(player.id);
+                        //console.log(game.players[i].id);
+                        //console.log(player.id);
                     }
                     
                     return result;
@@ -154,14 +155,17 @@ const deal = async (game, Discord,message) =>{
                         case '🇭':
                             console.log("Hit");
                             currPlayer.hand.push(new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),false));
+                            if(sumHand(currPlayer.hand) > 21){
+                                currPlayer.isStand = true;
+                            }
                             game.reacted.push(currPlayer.id);
                             break;
                         case '🇸':
                             console.log("Stand");
                             currPlayer.isStand = true;
-                            console.log(currPlayer.isStand);
+                            //console.log(currPlayer.isStand);
                             game.reacted.push(currPlayer.id);
-                            console.log("Player:"+currPlayer.id);
+                            //console.log("Player:"+currPlayer.id);
                             break;
                         case '❌':
                             console.log("Leave");
@@ -174,46 +178,80 @@ const deal = async (game, Discord,message) =>{
                     }
                     console.log(game.reacted.length);
                     console.log(game.players.size);
-                    if(game.reacted.length >= game.players.size){
+                    if(game.reacted.length === game.notReacted.length){
                         collector.stop();
                     }
                 })
 
                 collector.on('end',async (user) =>{
-                    
+                    console.log("Got all reactions")
+                    for(let id of game.notReacted){
+                        if(!game.reacted.includes(id)){
+                            game.players.delete(id);
+                        }
+                    }
                     await deal(game, Discord,message);
                     
-                    //console.log("Timeout")
                 })
                 
                 game.count++
                 
                 
-
-                
-                /*
-                embedMessage.awaitReactions(filter,{max: 1, time: 15000, errors:['time']})
-                .then(collected =>{
-                    const reaction = collected.first(); //grab first reaction
-                    console.log(reaction.emoji.name);
-                    console.log(collected);
-                }).catch(collected =>{
-                    console.log("Something wrong");
-                })
-                */
-                
         
             });
+}
+
+function endGame(game,Discord,message){
+    let dealerSum = sumHand(game.dealerHand);
+    while(dealerSum < 17){ //  Incase the dealer hand is still less than 17
+        let dealerCard = new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),false);
+        game.dealerHand.push(dealerCard);
+        dealerSum += dealerCard.value+1;
+    }
+    game.dealerHand[1].isFaceDown = false;
+    let dealerDisplay = printDealerHand(game.dealerHand);
+        const dealerShow = new Discord.MessageEmbed()
+        .setTitle("Final Dealer Hand").addFields(
+            
+            {name:'Cards:',value: `${dealerDisplay}`}
+            
+        )
+    message.channel.send(dealerShow)
 
     
+     for(let [id,player] of game.players){
+            let playerSum = sumHand(player.hand);
+            console.log("Sum:"+playerSum);
+            console.log("Dealer:"+dealerSum);
+            console.log("Stand:"+game.players.get(id).isStand);
+            if(playerSum > 21 || (playerSum < dealerSum && dealerSum <= 21)){
+                //v.hasLost = true
+                let text  = player.printHand();
+                const playerShow = new Discord.MessageEmbed()
+                    .setTitle(`Loser`)
+                    .addFields({name:'Final Hand:',value: `${text}`})
+                    .setDescription(`<@${id}>`)
+                message.channel.send(playerShow);
+                console.log("Player Bust");
+            }else if( playerSum <= 21 && dealerSum > 21 || (playerSum > dealerSum && playerSum <= 21)){
+                //v.hasWon = true;
+                let text  = player.printHand();
+                const playerShow = new Discord.MessageEmbed()
+                    .setTitle(`Winner`)
+                    .addFields({name:'Final Hand:',value: `${text}`})
+                    .setDescription(`<@${id}>`)
+                message.channel.send(playerShow);
+
+                game.players.delete(id)
+                console.log("Player Blackjack");
+            }else if( playerSum === dealerSum){
+
+                console.log("Tie")
+            }
+        }
 }
 
-async function displayWinner(player,Discord,message){
-    const playerShow = new Discord.MessageEmbed()
-        .setTitle(`Winner`).
-        setDescription(`<@${player.id}>`)
-    message.channel.send(playerShow);
-}
+
 
 const sumHand = (hand)=>{
     let sum = 0;
