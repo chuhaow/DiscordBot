@@ -1,7 +1,11 @@
 const gameList = new Map();
+/*
+TODO:
+-Let multiple players join the game
+*/
 module.exports = {
     name: 'blackjack',
-    aliases: ['hit','stand','leave'],
+    aliases: ['hit','stand','leave','join','start'],
     description: 'Starts a game of black jack',
     async execute(bot,message,cmd,args,Discord){
         
@@ -18,26 +22,58 @@ module.exports = {
                     count: 0,
                     end: false,
                     reacted: [],
-                    notReacted: []
+                    notReacted: [],
+                    inProgress: false,
+                    owner: undefined
                 }
                 game.players.set(message.author.id,new Player(message.author.id));
+                game.owner = message.author.id;
                 gameList.set(message.guild.id,game);
-                deal(game,Discord,message);
                 
+                const startMessage = new Discord.MessageEmbed()
+                    .setTitle(`A new blackjack game has been created by:`).addFields(
 
-                
+                    {name:'Commands:',value: `!join - To join the game \n !start - To start the game(Only owner)`}
+                    
+
+                    ).setDescription(`<@${message.author.id}>`)
+                message.channel.send(startMessage);
+
+                setTimeout(() => {
+                    if(!game.inProgress){
+                        gameList.delete(message.guild.id);
+                        const endMessage = new Discord.MessageEmbed()
+                        .setTitle(`Game did not start, Terminating`)
+                        message.channel.send(endMessage);
+                    }
+                }, 25000);
                 
                 
             }else{
-
+                return message.channel.send("Game already exists in this channel");
             }
 
-        }else if(cmd === 'hit'){
-            serverGame.count++;
-            console.log(serverGame.count);
-
+        }else if(cmd === 'join'){
+            if(!serverGame){
+                return message.channel.send("No game in progress in this channel type !blackjack to start a new game");
+            }else if(serverGame.players.get(message.author.id)){
+                return message.channel.send("You are already in the game");
+            }else if(serverGame.inProgress){
+                return message.channel.send("Game currently in progess, unable to join");
+            }
+            serverGame.players.set(message.author.id,new Player(message.author.id));
             
 
+        }else if( cmd === 'start'){
+            if(!serverGame){
+                return message.channel.send("No game in progress in this channel type !blackjack to start a new game");
+            }else if(message.author.id !== serverGame.owner){
+                return message.channel.send("Only the owner of the game can start");
+            }else if(serverGame.inProgress){
+                return message.channel.send("Game currently in progess, unable to join");
+            }
+            serverGame.inProgress = true;
+            deal(serverGame,Discord,message);
         }
 
         
@@ -133,14 +169,12 @@ const deal = async (game, Discord,message) =>{
                     }
                     //console.log(result);
                     for(let i = 0; i < game.notReacted.length;i++){
-                        if(game.notReacted[i] !== player.id){
+                        if(!game.notReacted.includes(player.id)){
                             result = false;
                             
                         }
-                        //console.log(game.players[i].id);
-                        //console.log(player.id);
                     }
-                    
+                    console.log(result);
                     return result;
                 }
                 
@@ -177,7 +211,7 @@ const deal = async (game, Discord,message) =>{
                             break;
                     }
                     console.log(game.reacted.length);
-                    console.log(game.players.size);
+                    console.log(game.notReacted.length);
                     if(game.reacted.length === game.notReacted.length){
                         collector.stop();
                     }
@@ -185,7 +219,7 @@ const deal = async (game, Discord,message) =>{
 
                 collector.on('end',async (user) =>{
                     console.log("Got all reactions")
-                    for(let id of game.notReacted){
+                    for(let id of game.notReacted){         //Remove any players who did not react
                         if(!game.reacted.includes(id)){
                             game.players.delete(id);
                         }
@@ -201,9 +235,9 @@ const deal = async (game, Discord,message) =>{
             });
 }
 
-function endGame(game,Discord,message){
+async function endGame(game,Discord,message){
     let dealerSum = sumHand(game.dealerHand);
-    while(dealerSum < 17){ //  Incase the dealer hand is still less than 17
+    while(dealerSum < 17){ //  In case the dealer hand is still less than 17
         let dealerCard = new Card(Math.floor(Math.random()*4),Math.floor(Math.random()*13),false);
         game.dealerHand.push(dealerCard);
         dealerSum += dealerCard.value+1;
@@ -226,43 +260,54 @@ function endGame(game,Discord,message){
             console.log("Stand:"+game.players.get(id).isStand);
             if(playerSum > 21 || (playerSum < dealerSum && dealerSum <= 21)){
                 //v.hasLost = true
-                let text  = player.printHand();
-                const playerShow = new Discord.MessageEmbed()
-                    .setTitle(`Loser`)
-                    .addFields({name:'Final Hand:',value: `${text}`})
-                    .setDescription(`<@${id}>`)
-                message.channel.send(playerShow);
+                await printPlayerResult(Discord,message,player,"Loser");
+
                 console.log("Player Bust");
             }else if( playerSum <= 21 && dealerSum > 21 || (playerSum > dealerSum && playerSum <= 21)){
                 //v.hasWon = true;
-                let text  = player.printHand();
-                const playerShow = new Discord.MessageEmbed()
-                    .setTitle(`Winner`)
-                    .addFields({name:'Final Hand:',value: `${text}`})
-                    .setDescription(`<@${id}>`)
-                message.channel.send(playerShow);
+                await printPlayerResult(Discord,message,player,"Winner");
 
                 game.players.delete(id)
                 console.log("Player Blackjack");
             }else if( playerSum === dealerSum){
-
+                await printPlayerResult(Discord,message,player, "Tie");
                 console.log("Tie")
             }
         }
+}
+
+async function printPlayerResult(Discord,message,player,result){
+    let text  = player.printHand();
+    const playerShow = new Discord.MessageEmbed()
+        .setTitle(result)
+        .addFields({name:'Final Hand:',value: `${text}`})
+        .setDescription(`<@${player.id}>`)
+    return message.channel.send(playerShow);
 }
 
 
 
 const sumHand = (hand)=>{
     let sum = 0;
- 
+    let hasOneAce = false
     for(let i = 0; i < hand.length;i++){
         if(hand[i].value+1 > 10){
             sum+= 10;
+        }else if(hand[i].value+1 === 1) {
+            if(!hasOneAce){
+                hasOneAce = true;
+            }else{
+                sum ++;
+            }
         }else{
             sum += hand[i].value+1;
         }
         
+    }
+    if(hasOneAce && sum <= 10){     //Only care if 1 of the aces is 11 or 1, all others will just be 1
+        sum+= 11;
+    }else{
+        sum++;
     }
     return sum
 }
