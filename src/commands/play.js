@@ -89,7 +89,7 @@ module.exports = {
     }
 }
 
-const videoFinder = async (query) =>{       //Function to help find first video from ytSearch
+async function videoFinder(query){       //Function to help find first video from ytSearch
     const videoResult = await ytSearch(query); 
     if(videoResult.videos.length > 1){
         return videoResult.videos[0];
@@ -98,7 +98,7 @@ const videoFinder = async (query) =>{       //Function to help find first video 
     }
 }
 
-const videoPlayer = async (guild,song)=>{
+async function videoPlayer(guild,song){
     const songQueue = queue.get(guild.id);
     if(!song){  //If we have not songs playing
         songQueue.voiceChannel.leave();     //leave
@@ -115,7 +115,7 @@ const videoPlayer = async (guild,song)=>{
     await songQueue.textChannel.send(`Now playing: ${song.title}`);
 }
 
-const skipSong = async (message,serverQueue) =>{
+async function skipSong(message,serverQueue){
     if(!message.member.voice.channel){
         return message.channel.send('You need to be in a channel to skip');
     }
@@ -132,7 +132,7 @@ const skipSong = async (message,serverQueue) =>{
     
 }
 
-const stopSong = async (message,serverQueue) =>{
+async function stopSong(message,serverQueue){
     if(!message.member.voice.channel){
         return message.channel.send('You need to be in a channel to Stop music');
     }
@@ -144,8 +144,8 @@ const stopSong = async (message,serverQueue) =>{
     await message.channel.send("Stoping music, and getting outta here");
 }
 
-const pauseSong = async(message,serverQueue) =>{
-    //bunch of checks
+async function pauseSong(message,serverQueue){
+    //edge case checks
     if(!message.member.voice.channel){
         return message.channel.send('You need to be in a channel to pause music');
     }
@@ -160,7 +160,7 @@ const pauseSong = async(message,serverQueue) =>{
     await message.channel.send(`Pausing ${serverQueue.songs[0].title}`);
 }
 
-const resumeSong = async(message,serverQueue) => {
+async function resumeSong(message,serverQueue){
     if(!message.member.voice.channel){
         return message.channel.send('You need to be in a channel to pause music');
     }
@@ -175,7 +175,7 @@ const resumeSong = async(message,serverQueue) => {
     await message.channel.send(`Resuming ${serverQueue.songs[0].title}`);
 }
 
-const getSongList = async(message,serverQueue) => {
+async function getSongList(message,serverQueue){
     if(!message.member.voice.channel){
         return message.channel.send('You need to be in a channel to get list of songs');
     }
